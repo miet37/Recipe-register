@@ -1,9 +1,14 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
+from flask_bootstrap import Bootstrap5
 import sqlite3
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['DATABASE'] = 'recipes.db'
+app.config['SECRET_KEY'] = 'your-secret-key-here-change-in-production'
+app.config['BOOTSTRAP_SERVE_LOCAL'] = True
+bootstrap = Bootstrap5(app)
 
 def get_db():
     """Create a database connection."""
@@ -24,7 +29,9 @@ def init_db():
             category TEXT NOT NULL,
             ingredients TEXT NOT NULL,
             processing TEXT NOT NULL,
-            tips TEXT
+            tips TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -33,87 +40,111 @@ def init_db():
 
 @app.route('/')
 def index():
-    """Render the main page."""
-    return render_template('index.html')
+    """Render the main page with recipes list."""
+    category = request.args.get('category', '')
+    search = request.args.get('search', '')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Get all categories
+    cursor.execute('SELECT DISTINCT category FROM recipes ORDER BY category')
+    categories = [row['category'] for row in cursor.fetchall()]
+    
+    # Build query based on filters
+    query = 'SELECT * FROM recipes WHERE 1=1'
+    params = []
+    
+    if category:
+        query += ' AND category = ?'
+        params.append(category)
+    
+    if search:
+        query += ' AND (name LIKE ? OR category LIKE ? OR ingredients LIKE ? OR processing LIKE ? OR tips LIKE ?)'
+        search_param = f'%{search}%'
+        params.extend([search_param] * 5)
+    
+    query += ' ORDER BY updated_at DESC, created_at DESC'
+    
+    cursor.execute(query, params)
+    recipes = [dict(row) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return render_template('index.html', 
+                         recipes=recipes, 
+                         categories=categories,
+                         current_category=category,
+                         current_search=search,
+                         year=datetime.now().year)
 
-@app.route('/api/categories', methods=['GET'])
-def get_categories():
-    """Get all unique categories."""
+@app.route('/recipe/new')
+def new_recipe():
+    """Render the form to add a new recipe."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('SELECT DISTINCT category FROM recipes ORDER BY category')
     categories = [row['category'] for row in cursor.fetchall()]
     conn.close()
-    return jsonify(categories)
+    
+    return render_template('recipe.html', recipe=None, categories=categories, year=datetime.now().year)
 
-@app.route('/api/recipes', methods=['GET'])
-def get_recipes():
-    """Get all recipes or filter by category."""
-    category = request.args.get('category')
+@app.route('/recipe/<int:recipe_id>')
+def edit_recipe(recipe_id):
+    """Render the form to edit an existing recipe."""
     conn = get_db()
     cursor = conn.cursor()
     
-    if category:
-        cursor.execute('SELECT * FROM recipes WHERE category = ? ORDER BY name', (category,))
-    else:
-        cursor.execute('SELECT * FROM recipes ORDER BY name')
-    
-    recipes = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(recipes)
-
-@app.route('/api/recipes/<int:recipe_id>', methods=['GET'])
-def get_recipe(recipe_id):
-    """Get a specific recipe by ID."""
-    conn = get_db()
-    cursor = conn.cursor()
     cursor.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,))
     recipe = cursor.fetchone()
+    
+    cursor.execute('SELECT DISTINCT category FROM recipes ORDER BY category')
+    categories = [row['category'] for row in cursor.fetchall()]
+    
     conn.close()
     
     if recipe:
-        return jsonify(dict(recipe))
-    return jsonify({'error': 'Recipe not found'}), 404
+        return render_template('recipe.html', recipe=dict(recipe), categories=categories, year=datetime.now().year)
+    
+    flash('Recipe not found', 'error')
+    return redirect(url_for('index'))
 
-@app.route('/api/recipes', methods=['POST'])
-def create_recipe():
-    """Create a new recipe."""
-    data = request.json
+@app.route('/recipe/save', methods=['POST'])
+def save_recipe():
+    """Save a new or updated recipe."""
+    recipe_id = request.form.get('id')
+    name = request.form.get('name')
+    category = request.form.get('category')
+    ingredients = request.form.get('ingredients')
+    processing = request.form.get('processing')
+    tips = request.form.get('tips', '')
+    
     conn = get_db()
     cursor = conn.cursor()
     
-    cursor.execute('''
-        INSERT INTO recipes (name, category, ingredients, processing, tips)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (data['name'], data['category'], data['ingredients'], 
-          data['processing'], data.get('tips', '')))
-    
-    conn.commit()
-    recipe_id = cursor.lastrowid
-    conn.close()
-    
-    return jsonify({'id': recipe_id, 'message': 'Recipe created successfully'}), 201
-
-@app.route('/api/recipes/<int:recipe_id>', methods=['PUT'])
-def update_recipe(recipe_id):
-    """Update an existing recipe."""
-    data = request.json
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE recipes 
-        SET name = ?, category = ?, ingredients = ?, processing = ?, tips = ?
-        WHERE id = ?
-    ''', (data['name'], data['category'], data['ingredients'], 
-          data['processing'], data.get('tips', ''), recipe_id))
+    if recipe_id:
+        # Update existing recipe
+        cursor.execute('''
+            UPDATE recipes 
+            SET name = ?, category = ?, ingredients = ?, processing = ?, tips = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (name, category, ingredients, processing, tips, recipe_id))
+        flash('Recipe updated successfully!', 'success')
+    else:
+        # Create new recipe
+        cursor.execute('''
+            INSERT INTO recipes (name, category, ingredients, processing, tips)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (name, category, ingredients, processing, tips))
+        flash('Recipe added successfully!', 'success')
     
     conn.commit()
     conn.close()
     
-    return jsonify({'message': 'Recipe updated successfully'})
+    return redirect(url_for('index'))
 
-@app.route('/api/recipes/<int:recipe_id>', methods=['DELETE'])
+@app.route('/recipe/delete/<int:recipe_id>', methods=['POST'])
 def delete_recipe(recipe_id):
     """Delete a recipe."""
     conn = get_db()
@@ -122,7 +153,8 @@ def delete_recipe(recipe_id):
     conn.commit()
     conn.close()
     
-    return jsonify({'message': 'Recipe deleted successfully'})
+    flash('Recipe deleted successfully!', 'success')
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     init_db()

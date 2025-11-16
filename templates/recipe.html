@@ -1,0 +1,137 @@
+{% extends 'base_menu.html' %}
+
+{% block title %}{% if recipe %}Edit Recipe{% else %}Add Recipe{% endif %} - Recipe Register{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-md-8 offset-md-2">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0">
+                    {% if recipe %}
+                        ✏️ Edit Recipe
+                    {% else %}
+                        ➕ Add New Recipe
+                    {% endif %}
+                </h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('save_recipe') }}">
+                    {% if recipe %}
+                        <input type="hidden" name="id" value="{{ recipe.id }}">
+                    {% endif %}
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Recipe Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ recipe.name if recipe else '' }}" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="category" class="form-label">Category <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="category" name="category" 
+                               value="{{ recipe.category if recipe else '' }}" 
+                               list="categoryList" required
+                               placeholder="e.g., Breakfast, Lunch, Dinner, Dessert">
+                        <datalist id="categoryList">
+                            {% for cat in categories %}
+                                <option value="{{ cat }}">
+                            {% endfor %}
+                        </datalist>
+                        <small class="form-text text-muted">
+                            Enter a new category or select from existing ones
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="ingredients" class="form-label">Ingredients <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="ingredients" name="ingredients" 
+                                  rows="6" required
+                                  placeholder="List all ingredients, one per line">{{ recipe.ingredients if recipe else '' }}</textarea>
+                        <small class="form-text text-muted">
+                            List each ingredient on a new line for better readability
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="processing" class="form-label">Instructions <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="processing" name="processing" 
+                                  rows="8" required
+                                  placeholder="Describe the cooking steps">{{ recipe.processing if recipe else '' }}</textarea>
+                        <small class="form-text text-muted">
+                            Describe each step clearly. Number your steps for easy following
+                        </small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="tips" class="form-label">Tips (Optional)</label>
+                        <textarea class="form-control" id="tips" name="tips" 
+                                  rows="4"
+                                  placeholder="Any helpful tips or suggestions">{{ recipe.tips if recipe else '' }}</textarea>
+                        <small class="form-text text-muted">
+                            Add any helpful hints, variations, or serving suggestions
+                        </small>
+                    </div>
+
+                    {% if recipe %}
+                    <div class="alert alert-info">
+                        <small>
+                            📅 Created: 
+                            {% if recipe.created_at %}{{ recipe.created_at }}{% else %}N/A{% endif %}
+                            <br>
+                            ✅ Last Updated: 
+                            {% if recipe.updated_at %}{{ recipe.updated_at }}{% else %}N/A{% endif %}
+                        </small>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">
+                            ❌ Cancel
+                        </a>
+                        <button type="submit" class="btn btn-success">
+                            💾 
+                            {% if recipe %}Update Recipe{% else %}Save Recipe{% endif %}
+                        </button>
+                    </div>
+                </form>
+
+                {% if recipe %}
+                <hr class="my-4">
+                <div class="text-end">
+                    <button type="button" class="btn btn-danger" 
+                            data-bs-toggle="modal" 
+                            data-bs-target="#deleteModal">
+                        🗑️ Delete Recipe
+                    </button>
+                </div>
+
+                <!-- Delete Confirmation Modal -->
+                <div class="modal fade" id="deleteModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Confirm Delete</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p>Are you sure you want to delete <strong>{{ recipe.name }}</strong>?</p>
+                                <p class="text-danger">This action cannot be undone.</p>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <form method="POST" action="{{ url_for('delete_recipe', recipe_id=recipe.id) }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger">
+                                        🗑️ Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
