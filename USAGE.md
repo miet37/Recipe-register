@@ -13,14 +13,15 @@ python app.py
 
 ### Adding a Recipe
 
-1. Click the **"Add"** button in the top right corner
+1. Click the **"Add Recipe"** link in the navigation menu
 2. Fill in the recipe form:
    - **Recipe Name**: Give your recipe a descriptive name
-   - **Category**: Enter a category (e.g., Breakfast, Lunch, Dinner, Dessert)
+   - **Category**: Enter a category or select from existing ones (e.g., Breakfast, Lunch, Dinner, Dessert)
    - **Ingredients**: List all ingredients, one per line
    - **Processing/Instructions**: Describe the cooking steps
    - **Tips** (optional): Add any helpful cooking tips
-3. Click **"Save Recipe"** to save
+3. Click **"Save Recipe"** to save and return to the main page
+4. The recipe will automatically have creation and update timestamps
 
 ### Viewing Recipes
 
