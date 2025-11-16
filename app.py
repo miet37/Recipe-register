@@ -1,128 +1,103 @@
-from flask import Flask, render_template, request, jsonify
-import sqlite3
-import os
+from flask import Flask, render_template
+from flask_bootstrap import Bootstrap
+from model import db
+from recipe_blueprint import recipe_bp
+from datetime import datetime
 
 app = Flask(__name__)
-app.config['DATABASE'] = 'recipes.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///att_register.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-def get_db():
-    """Create a database connection."""
-    conn = sqlite3.connect(app.config['DATABASE'])
-    conn.row_factory = sqlite3.Row
-    return conn
+# Initialize extensions
+db.init_app(app)
+bootstrap = Bootstrap(app)
 
-def init_db():
-    """Initialize the database with tables."""
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Create recipes table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS recipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            ingredients TEXT NOT NULL,
-            processing TEXT NOT NULL,
-            tips TEXT
-        )
-    ''')
-    
-    conn.commit()
-    conn.close()
+# Register blueprints
+app.register_blueprint(recipe_bp)
+
 
 @app.route('/')
 def index():
-    """Render the main page."""
-    return render_template('index.html')
+    """Render the main landing page."""
+    return '''
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Register Application</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .main-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 60px;
+            max-width: 600px;
+            text-align: center;
+        }
+        .app-title {
+            font-size: 48px;
+            font-weight: bold;
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+        .app-icon {
+            font-size: 80px;
+            color: #28a745;
+            margin-bottom: 30px;
+        }
+        .description {
+            font-size: 18px;
+            color: #6c757d;
+            margin-bottom: 40px;
+        }
+        .btn-launch {
+            font-size: 20px;
+            padding: 15px 40px;
+            border-radius: 50px;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .btn-launch:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(40, 167, 69, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="app-icon">
+            <i class="bi bi-book"></i>
+        </div>
+        <div class="app-title">Recipe Register</div>
+        <div class="description">
+            Organize your favorite recipes by category with an intuitive interface for adding, editing, and managing your culinary collection.
+        </div>
+        <a href="/recipe/" class="btn btn-success btn-launch btn-lg">
+            <i class="bi bi-arrow-right-circle"></i> Launch Recipe Register
+        </a>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+    '''
 
-@app.route('/api/categories', methods=['GET'])
-def get_categories():
-    """Get all unique categories."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT DISTINCT category FROM recipes ORDER BY category')
-    categories = [row['category'] for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(categories)
 
-@app.route('/api/recipes', methods=['GET'])
-def get_recipes():
-    """Get all recipes or filter by category."""
-    category = request.args.get('category')
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if category:
-        cursor.execute('SELECT * FROM recipes WHERE category = ? ORDER BY name', (category,))
-    else:
-        cursor.execute('SELECT * FROM recipes ORDER BY name')
-    
-    recipes = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(recipes)
+def init_db():
+    """Initialize the database with tables."""
+    with app.app_context():
+        db.create_all()
 
-@app.route('/api/recipes/<int:recipe_id>', methods=['GET'])
-def get_recipe(recipe_id):
-    """Get a specific recipe by ID."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('SELECT * FROM recipes WHERE id = ?', (recipe_id,))
-    recipe = cursor.fetchone()
-    conn.close()
-    
-    if recipe:
-        return jsonify(dict(recipe))
-    return jsonify({'error': 'Recipe not found'}), 404
-
-@app.route('/api/recipes', methods=['POST'])
-def create_recipe():
-    """Create a new recipe."""
-    data = request.json
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        INSERT INTO recipes (name, category, ingredients, processing, tips)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (data['name'], data['category'], data['ingredients'], 
-          data['processing'], data.get('tips', '')))
-    
-    conn.commit()
-    recipe_id = cursor.lastrowid
-    conn.close()
-    
-    return jsonify({'id': recipe_id, 'message': 'Recipe created successfully'}), 201
-
-@app.route('/api/recipes/<int:recipe_id>', methods=['PUT'])
-def update_recipe(recipe_id):
-    """Update an existing recipe."""
-    data = request.json
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        UPDATE recipes 
-        SET name = ?, category = ?, ingredients = ?, processing = ?, tips = ?
-        WHERE id = ?
-    ''', (data['name'], data['category'], data['ingredients'], 
-          data['processing'], data.get('tips', ''), recipe_id))
-    
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'message': 'Recipe updated successfully'})
-
-@app.route('/api/recipes/<int:recipe_id>', methods=['DELETE'])
-def delete_recipe(recipe_id):
-    """Delete a recipe."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM recipes WHERE id = ?', (recipe_id,))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'message': 'Recipe deleted successfully'})
 
 if __name__ == '__main__':
     init_db()
